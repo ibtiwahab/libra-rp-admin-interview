@@ -1,0 +1,14 @@
+# See the root .gitignore for the full list.
+node_modules/
+.next/
+out/
+.vercel/
+.env
+.env.*
+!.env.example
+*.local
+next-env.d.ts
+*.tsbuildinfo
+test-results/
+playwright-report/
+*.log

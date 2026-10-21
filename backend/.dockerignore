@@ -1,0 +1,8 @@
+node_modules
+dist
+.data
+.env
+.dev-credentials.local
+tests
+coverage
+*.log

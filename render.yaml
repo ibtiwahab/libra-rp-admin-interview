@@ -1,0 +1,34 @@
+# Render blueprint for the LIBRA RP API (backend only — the frontend is deployed on Vercel).
+# Render dashboard → New → Blueprint → select this repository.
+# You will be asked for the two values marked `sync: false`.
+services:
+  - type: web
+    name: libra-rp-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: '22'
+      # Stops the test-only MongoDB binary from being downloaded on every build.
+      - key: MONGOMS_DISABLE_POSTINSTALL
+        value: '1'
+      # Requests arrive via Vercel's proxy and then Render's proxy.
+      - key: TRUST_PROXY
+        value: '2'
+      # Atlas connection string WITH a database name, e.g.
+      # mongodb+srv://USER:PASS@cluster.mongodb.net/libra_interviews?retryWrites=true&w=majority
+      - key: MONGODB_URI
+        sync: false
+      # Your Vercel production URL, e.g. https://libra-rp.vercel.app (no trailing slash)
+      - key: FRONTEND_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: MFA_ENCRYPTION_KEY
+        generateValue: true

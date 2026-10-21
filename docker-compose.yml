@@ -1,0 +1,62 @@
+# LIBRA RP — Admin Recruitment System
+#
+#   cp .env.example .env            # then fill in the two secrets
+#   docker compose up -d --build
+#   docker compose run --rm api node dist/scripts/bootstrap-head-admin.js --username=director --name="Server Director"
+#   docker compose run --rm api node dist/scripts/seed.js        # optional starter question bank
+#
+# Open http://localhost:3000/admin/login
+
+name: libra-rp-interviews
+
+services:
+  mongo:
+    image: mongo:7.0
+    restart: unless-stopped
+    # Single-node replica set: required for multi-document transactions.
+    command: ['mongod', '--replSet', 'rs0', '--bind_ip_all']
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      # Initiates the replica set on first boot, then reports healthy once it is primary.
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongo:27017' }] }).ok }"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 10s
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      BACKEND_PORT: '5000'
+      MONGODB_URI: mongodb://mongo:27017/libra_interviews?replicaSet=rs0
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET must be set in .env}
+      MFA_ENCRYPTION_KEY: ${MFA_ENCRYPTION_KEY:?MFA_ENCRYPTION_KEY must be set in .env}
+      # Browsers accept Secure cookies on http://localhost; behind real TLS keep this true.
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      TRUST_PROXY: '1'
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      HEARTBEAT_TIMEOUT_ACTION: ${HEARTBEAT_TIMEOUT_ACTION:-EXPIRE}
+    expose:
+      - '5000'
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://api:5000
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+
+volumes:
+  mongo-data:

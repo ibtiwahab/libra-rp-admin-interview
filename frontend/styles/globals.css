@@ -1,0 +1,165 @@
+@import 'tailwindcss' source(none);
+@source '../app';
+@source '../components';
+@source '../hooks';
+@source '../lib';
+
+/* ───────────────────────── LIBRA RP design tokens ───────────────────────── */
+@theme {
+  --color-ink: #0b0c10;
+  --color-ink-2: #0e1015;
+  --color-panel: #13151b;
+  --color-surface: #191c23;
+  --color-surface-2: #1f232b;
+  --color-surface-3: #282d37;
+  --color-line: rgb(255 255 255 / 0.07);
+  --color-line-2: rgb(255 255 255 / 0.12);
+
+  --color-gold: #c9a961;
+  --color-gold-bright: #dcc28a;
+  --color-gold-deep: #8c7038;
+  --color-gold-ink: #1d1810;
+
+  --color-azure: #6f9bf2;
+  --color-violet: #9586f0;
+
+  --color-fg: #eeeef0;
+  --color-fg-2: #b4b7c0;
+  --color-fg-3: #858995;
+  --color-fg-4: #5a5e69;
+
+  --color-ok: #4fae8a;
+  --color-ok-deep: #1d3b31;
+  --color-warn: #dba54a;
+  --color-warn-deep: #3d2f16;
+  --color-bad: #e05d55;
+  --color-bad-deep: #3e1a19;
+
+  /* One typeface everywhere — "display" is kept as an alias so existing classes still work. */
+  --font-display: var(--font-sans-face), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-sans-face), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono-face), ui-monospace, monospace;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 12px;
+
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  /* kept as a no-op so the low-time state is a colour change only */
+  --animate-pulse-soft: none;
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+
+/* ───────────────────────── base ───────────────────────── */
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  html,
+  body {
+    background: var(--color-ink);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    min-height: 100dvh;
+  }
+  ::selection {
+    background: rgb(201 169 97 / 0.35);
+    color: #fff;
+  }
+  * {
+    border-color: var(--color-line);
+  }
+  :focus-visible {
+    outline: 2px solid rgb(201 169 97 / 0.7);
+    outline-offset: 2px;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.1);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* ───────────────────────── surfaces (deliberately plain) ───────────────────────── */
+@layer components {
+  .panel,
+  .glass {
+    background: var(--color-panel);
+    border: 1px solid var(--color-line);
+  }
+  .panel-flat {
+    background: var(--color-panel);
+    border: 1px solid var(--color-line);
+  }
+  .text-gold-metal {
+    color: var(--color-gold);
+  }
+  .rule-gold {
+    height: 1px;
+    background: var(--color-line);
+  }
+  /* Former decorative effects are disabled; classes remain harmless. */
+  .border-animated,
+  .noise,
+  .bg-grid {
+    background-image: none;
+  }
+  .label-caps {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--color-fg-3);
+  }
+  .skeleton {
+    background: linear-gradient(90deg, rgb(255 255 255 / 0.03) 0%, rgb(255 255 255 / 0.07) 50%, rgb(255 255 255 / 0.03) 100%);
+    background-size: 200% 100%;
+    animation: var(--animate-shimmer);
+    border-radius: var(--radius-sm);
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Never print examination content. */
+@media print {
+  .exam-protected {
+    display: none !important;
+  }
+  body::before {
+    content: 'LIBRA RP — Confidential examination material. Printing is disabled.';
+    display: block;
+    padding: 4rem;
+    font: 600 16px sans-serif;
+    color: #000;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
