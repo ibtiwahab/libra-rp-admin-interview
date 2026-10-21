@@ -14,7 +14,7 @@ Browser ──▶ Vercel (Next.js, /api/* proxied) ──▶ Render (Express API
 
 ### Step 2 — Render (API)
 1. Push the repository to GitHub.
-2. Render → **New → Blueprint** → pick the repo. It reads `render.yaml` (root dir `backend`, build `npm ci && npm run build`, start `npm start`, health check `/api/health`, secrets generated automatically).
+2. Render → **New → Blueprint** → pick the repo. It reads `render.yaml` (root dir `backend`, build `npm ci --include=dev && npm run build`, start `npm start`, health check `/api/health`, secrets generated automatically).
 3. Enter the two prompted values: `MONGODB_URI` (from step 1) and `FRONTEND_URL` (your Vercel production URL, no trailing slash — you can fill it after step 3 and redeploy).
 4. Note the service URL, e.g. `https://libra-rp-api.onrender.com`. Check `https://…onrender.com/api/health` returns `{"status":"ok","db":true}`.
 
