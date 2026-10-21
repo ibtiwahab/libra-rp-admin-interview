@@ -41,7 +41,8 @@ const schema = z.object({
   DNS_SERVERS: z.string().default(''),
 });
 
-const parsed = schema.safeParse(process.env);
+// Hosting platforms (Render, Railway, Heroku…) assign the port via PORT; it takes precedence.
+const parsed = schema.safeParse({ ...process.env, BACKEND_PORT: process.env.PORT || process.env.BACKEND_PORT });
 if (!parsed.success) {
   // eslint-disable-next-line no-console
   console.error('Invalid environment configuration:\n', parsed.error.flatten().fieldErrors);
