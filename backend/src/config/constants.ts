@@ -18,8 +18,8 @@ export const DIFFICULTIES = ['EASY', 'MEDIUM', 'HARD', 'EXPERT'] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
 
 export const TIMER_MIN_SECONDS = 30;
-export const TIMER_MAX_SECONDS = 60;
-export const TIMER_DEFAULT_SECONDS = 45;
+export const TIMER_MAX_SECONDS = 300;
+export const TIMER_DEFAULT_SECONDS = 180;
 
 export const TEMPLATE_STATUSES = ['DRAFT', 'PUBLISHED', 'ARCHIVED'] as const;
 export type TemplateStatus = (typeof TEMPLATE_STATUSES)[number];

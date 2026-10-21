@@ -6,7 +6,7 @@ import { LibraMark } from '@/components/brand/libra-mark';
 import { Button } from '@/components/ui/button';
 import { useExamGuard, type ViolationDetails } from '@/hooks/use-exam-guard';
 import { ApiError } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn, fmtTimer } from '@/lib/utils';
 import { examApi, isTerminal, sendExitBeacon, type AnswerPayload, type ClientSignal, type ExamState, type QuestionState, type TerminalState } from '@/services/exam';
 import { DigitalTimer } from './countdown';
 import { Watermark } from './watermark';
@@ -332,7 +332,7 @@ export function ExamRunner({ initial, fullscreenSupported, onExit }: { initial: 
         <section key={question.index} className="panel flex flex-1 flex-col rounded-[10px]">
           <div className="border-b border-line px-5 py-5 sm:px-6">
             <p className="text-[12.5px] text-fg-4">
-              {question.category} · {question.timeLimitSeconds} seconds
+              {question.category} · {fmtTimer(question.timeLimitSeconds)}
             </p>
             <h1 className="mt-1.5 text-[19px] font-semibold leading-snug text-fg">{question.prompt}</h1>
             {question.scenario && <p className="mt-3 whitespace-pre-wrap rounded-[8px] bg-white/[0.03] px-4 py-3 text-[14px] leading-relaxed text-fg-2">{question.scenario}</p>}

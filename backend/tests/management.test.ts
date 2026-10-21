@@ -143,16 +143,17 @@ describe('question bank', () => {
     expect(await QuestionVersion.countDocuments({ questionId: id })).toBe(3);
   });
 
-  it('enforces the 30–60 second timer range and defaults to 45 seconds', async () => {
+  it('enforces the 30 s – 5 min timer range and defaults to 3 minutes', async () => {
     const c = await headAdmin();
     const [cat] = await seedCategories(c);
     const base = { title: 'Timer test', prompt: 'Timer prompt?', type: 'SHORT_TEXT', categoryId: cat };
     expect((await c.post('/api/questions', { ...base, timeLimitSeconds: 29 })).status).toBe(400);
-    expect((await c.post('/api/questions', { ...base, timeLimitSeconds: 61 })).status).toBe(400);
+    expect((await c.post('/api/questions', { ...base, timeLimitSeconds: 301 })).status).toBe(400);
     expect((await c.post('/api/questions', { ...base, timeLimitSeconds: 30 })).status).toBe(201);
-    expect((await c.post('/api/questions', { ...base, timeLimitSeconds: 60 })).status).toBe(201);
+    expect((await c.post('/api/questions', { ...base, timeLimitSeconds: 300 })).status).toBe(201);
+    expect((await c.post('/api/questions', { ...base, timeLimitSeconds: 180 })).status).toBe(201);
     const def = await c.post('/api/questions', base);
-    expect(def.body.timeLimitSeconds).toBe(45);
+    expect(def.body.timeLimitSeconds).toBe(180);
   });
 
   it('validates multiple-choice and true/false answer keys', async () => {

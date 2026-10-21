@@ -22,7 +22,7 @@ import { Select } from '@/components/ui/select';
 import { useCategories } from '@/hooks/use-admin';
 import { errorMessage } from '@/lib/api';
 import type { Interview, Question } from '@/lib/types';
-import { cn, fmtDateTime, fmtDuration } from '@/lib/utils';
+import { cn, fmtDateTime, fmtDuration, fmtTimer } from '@/lib/utils';
 import { adminApi, qk } from '@/services/admin';
 
 interface Entry {
@@ -182,7 +182,7 @@ export function InterviewBuilder({ id }: { id: string }) {
                   <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setPreview(toPreview(q))}>
                     <p className="truncate text-[12.5px] font-semibold text-fg">{q.title}</p>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px] text-fg-4">
-                      <span>{q.category.name}</span>·<span>{TYPE_META[q.type].short}</span>·<span className="tabular">{q.timeLimitSeconds}s</span>·<span>{q.maxScore} pts</span>
+                      <span>{q.category.name}</span>·<span>{TYPE_META[q.type].short}</span>·<span className="tabular">{fmtTimer(q.timeLimitSeconds)}</span>·<span>{q.maxScore} pts</span>
                     </div>
                   </div>
                   <Button
@@ -222,7 +222,7 @@ export function InterviewBuilder({ id }: { id: string }) {
               </SortableContext>
             </DndContext>
           ) : (
-            <EmptyState icon={<Layers />} title="No questions selected" description="Add questions from the bank on the left. Each keeps its own strict timer (30–60s), which you may override here." />
+            <EmptyState icon={<Layers />} title="No questions selected" description="Add questions from the bank on the left. Each keeps its own strict timer (30 s – 5 min), which you may override here." />
           )}
         </Panel>
 
@@ -338,12 +338,12 @@ function SequenceItem({ q, entry, index, onRemove, onTimer, onPreview }: { q: Qu
           <span className="text-[10.5px] text-fg-4">{q.category.name} · {q.maxScore} pts</span>
         </div>
       </div>
-      <div className="w-[84px] shrink-0">
+      <div className="w-[104px] shrink-0">
         <Select
           size="sm"
           value={entry.timeLimitSeconds === null ? 'default' : String(entry.timeLimitSeconds)}
           onValueChange={(v) => onTimer(v === 'default' ? null : Number(v))}
-          options={[{ value: 'default', label: `${q.timeLimitSeconds}s`, hint: 'default' }, ...[30, 35, 40, 45, 50, 55, 60].map((s) => ({ value: String(s), label: `${s}s`, hint: 'override' }))]}
+          options={[{ value: 'default', label: fmtTimer(q.timeLimitSeconds), hint: 'default' }, ...[30, 60, 90, 120, 180, 240, 300].map((s) => ({ value: String(s), label: fmtTimer(s), hint: 'override' }))]}
         />
       </div>
       {entry.timeLimitSeconds !== null && <TimerPill s={entry.timeLimitSeconds} override />}

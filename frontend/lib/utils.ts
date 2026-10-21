@@ -36,6 +36,15 @@ export function fmtDuration(totalSeconds: number) {
   return `${sec}s`;
 }
 
+/** Human timer label: 45 → "45 s", 180 → "3 min", 150 → "2 min 30 s". */
+export function fmtTimer(seconds: number) {
+  const s = Math.max(0, Math.round(seconds));
+  if (s < 60) return `${s} s`;
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return r ? `${m} min ${r} s` : `${m} min`;
+}
+
 export function clock(ms: number) {
   const total = Math.max(0, Math.ceil(ms / 1000));
   const m = Math.floor(total / 60);

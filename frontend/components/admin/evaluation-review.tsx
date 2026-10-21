@@ -14,7 +14,7 @@ import { Input, Textarea } from '@/components/ui/input';
 import { useMe } from '@/hooks/use-admin';
 import { download, errorMessage } from '@/lib/api';
 import type { Decision, EvaluationDetail, EvaluationQuestion } from '@/lib/types';
-import { cn, fmtDateTime, fmtDuration, fmtTime, humanize, pct } from '@/lib/utils';
+import { cn, fmtDateTime, fmtDuration, fmtTime, fmtTimer, humanize, pct } from '@/lib/utils';
 import { adminApi, qk } from '@/services/admin';
 
 interface Mark {
@@ -263,7 +263,7 @@ function QuestionReview({ q, mark, onMark }: { q: EvaluationQuestion; mark?: Mar
         <span className="flex items-center gap-1.5 text-[11.5px] text-fg-3">
           {statusIcon}
           {humanize(q.status)}
-          {q.responseMs !== null && ` in ${(q.responseMs / 1000).toFixed(1)}s`} / {q.allowedSeconds}s
+          {q.responseMs !== null && ` in ${(q.responseMs / 1000).toFixed(1)}s`} / {fmtTimer(q.allowedSeconds)}
         </span>
         <span className="ml-auto text-[11px] text-fg-4">{q.submittedAt ? `Submitted ${fmtTime(q.submittedAt)}` : q.closedAt ? `Closed ${fmtTime(q.closedAt)}` : ''}</span>
       </header>

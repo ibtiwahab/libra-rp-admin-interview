@@ -3,7 +3,7 @@
 import { CheckCircle2, Eye, FileText, Timer } from 'lucide-react';
 import { Dialog } from '@/components/ui/dialog';
 import type { QuestionOption, QuestionType } from '@/lib/types';
-import { cn } from '@/lib/utils';
+import { cn, fmtTimer } from '@/lib/utils';
 import { TYPE_META } from './question-editor';
 
 export interface PreviewQuestion {
@@ -35,7 +35,7 @@ export function QuestionCard({ q, index, total, showKey = true }: { q: PreviewQu
           {q.categoryName && <span>· {q.categoryName}</span>}
           <span>· {TYPE_META[q.type].label}</span>
           <span className="ml-auto flex items-center gap-1 text-fg-2">
-            <Timer className="h-3.5 w-3.5 text-gold" /> {q.timeLimitSeconds}s
+            <Timer className="h-3.5 w-3.5 text-gold" /> {fmtTimer(q.timeLimitSeconds)}
           </span>
         </div>
         <h3 className="font-display text-[24px] font-semibold leading-tight text-fg">{q.title}</h3>

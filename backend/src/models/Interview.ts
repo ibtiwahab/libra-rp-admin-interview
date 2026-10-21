@@ -6,7 +6,7 @@ import { optionSchema } from './Question';
 const templateQuestionSchema = new Schema(
   {
     questionId: { type: Schema.Types.ObjectId, ref: 'Question', required: true },
-    /** Optional per-interview timer override (30–60s); falls back to the question's own timer. */
+    /** Optional per-interview timer override (30 s – 5 min); falls back to the question's own timer. */
     timeLimitSeconds: { type: Number, min: TIMER_MIN_SECONDS, max: TIMER_MAX_SECONDS, default: null },
   },
   { _id: false },

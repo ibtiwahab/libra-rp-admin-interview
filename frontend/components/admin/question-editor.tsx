@@ -14,7 +14,7 @@ import { Select } from '@/components/ui/select';
 import { useCategories } from '@/hooks/use-admin';
 import { errorMessage } from '@/lib/api';
 import type { Difficulty, Question, QuestionType } from '@/lib/types';
-import { cn } from '@/lib/utils';
+import { cn, fmtTimer } from '@/lib/utils';
 import { adminApi } from '@/services/admin';
 
 export const TYPE_META: Record<QuestionType, { label: string; short: string; hint: string }> = {
@@ -41,7 +41,7 @@ const schema = z
     type: z.enum(['SHORT_TEXT', 'LONG_TEXT', 'MULTIPLE_CHOICE', 'SCENARIO', 'TRUE_FALSE']),
     categoryId: z.string().min(1, 'Choose a category'),
     difficulty: z.enum(['EASY', 'MEDIUM', 'HARD', 'EXPERT']),
-    timeLimitSeconds: z.coerce.number().int().min(30, 'Minimum 30 seconds').max(60, 'Maximum 60 seconds'),
+    timeLimitSeconds: z.coerce.number().int().min(30, 'Minimum 30 seconds').max(300, 'Maximum 5 minutes'),
     maxScore: z.coerce.number().int().min(1).max(100),
     rubric: z.string().trim().max(4000),
     options: z.array(z.object({ key: z.string(), text: z.string().trim(), correct: z.boolean() })),
@@ -64,7 +64,7 @@ const blankOptions = () => KEYS.slice(0, 4).map((key) => ({ key, text: '', corre
 
 function toForm(q?: Question | null): Form {
   if (!q) {
-    return { title: '', prompt: '', scenario: '', type: 'LONG_TEXT', categoryId: '', difficulty: 'MEDIUM', timeLimitSeconds: 45, maxScore: 10, rubric: '', options: blankOptions(), allowMultiple: false, correctBoolean: null };
+    return { title: '', prompt: '', scenario: '', type: 'LONG_TEXT', categoryId: '', difficulty: 'MEDIUM', timeLimitSeconds: 180, maxScore: 10, rubric: '', options: blankOptions(), allowMultiple: false, correctBoolean: null };
   }
   return {
     title: q.title,
@@ -135,7 +135,7 @@ export function QuestionEditor({ open, onOpenChange, question }: { open: boolean
     onError: (e) => toast.error(errorMessage(e)),
   });
 
-  const timerTone = timer <= 35 ? 'text-bad' : timer <= 45 ? 'text-warn' : 'text-ok';
+  const timerTone = timer < 60 ? 'text-bad' : timer < 120 ? 'text-warn' : 'text-ok';
 
   return (
     <Dialog
@@ -292,20 +292,19 @@ export function QuestionEditor({ open, onOpenChange, question }: { open: boolean
               <p className="flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.12em] text-fg-2">
                 <Timer className="h-4 w-4 text-gold" /> Time limit
               </p>
-              <p className={cn('font-display text-[30px] font-semibold leading-none tabular', timerTone)}>
-                {timer}
-                <span className="text-[14px] text-fg-4">s</span>
+              <p className={cn('text-[22px] font-semibold leading-none tabular', timerTone)}>
+                {fmtTimer(timer)}
               </p>
             </div>
-            <input type="range" min={30} max={60} step={1} className="mt-4 w-full accent-[#C9A961]" {...register('timeLimitSeconds', { valueAsNumber: true })} aria-label="Time limit in seconds" />
+            <input type="range" min={30} max={300} step={15} className="mt-4 w-full accent-[#C9A961]" {...register('timeLimitSeconds', { valueAsNumber: true })} aria-label="Time limit in seconds" />
             <div className="mt-2 flex justify-between gap-1.5">
-              {[30, 40, 45, 50, 60].map((s) => (
+              {[30, 60, 120, 180, 300].map((s) => (
                 <button type="button" key={s} onClick={() => setValue('timeLimitSeconds', s)} className={cn('flex-1 rounded-[6px] border py-1 text-[11px] font-bold tabular transition', timer === s ? 'border-gold/50 bg-gold/10 text-gold-bright' : 'border-line text-fg-4 hover:text-fg-2')}>
-                  {s}s
+                  {fmtTimer(s)}
                 </button>
               ))}
             </div>
-            <p className="mt-2.5 text-[11px] text-fg-4">Strict server-enforced timer between 30 and 60 seconds (default 45).</p>
+            <p className="mt-2.5 text-[11px] text-fg-4">Strict server-enforced timer between 30 seconds and 5 minutes (default 3 minutes).</p>
           </div>
 
           <Field label="Maximum score" htmlFor="q-max" error={formState.errors.maxScore?.message}>

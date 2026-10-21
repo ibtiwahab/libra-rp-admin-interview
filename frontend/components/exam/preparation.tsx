@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/primitives';
 import { ApiError } from '@/lib/api';
-import { fmtDateTime, fmtDuration } from '@/lib/utils';
+import { fmtDateTime, fmtDuration, fmtTimer } from '@/lib/utils';
 import { examApi, type CandidateInfo, type ExamState, type Preflight } from '@/services/exam';
 
 const RULES = [
@@ -151,7 +151,7 @@ export function Preparation({ candidate, onStarted }: { candidate: CandidateInfo
   };
 
   const iv = ins.data?.interview;
-  const timers = iv ? (iv.shortestTimerSeconds === iv.longestTimerSeconds ? `${iv.shortestTimerSeconds} seconds` : `${iv.shortestTimerSeconds}–${iv.longestTimerSeconds} seconds`) : '';
+  const timers = iv ? (iv.shortestTimerSeconds === iv.longestTimerSeconds ? fmtTimer(iv.shortestTimerSeconds) : `${fmtTimer(iv.shortestTimerSeconds)} – ${fmtTimer(iv.longestTimerSeconds)}`) : '';
 
   return (
     <main className="min-h-dvh bg-ink">

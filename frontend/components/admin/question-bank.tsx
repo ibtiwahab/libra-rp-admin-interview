@@ -20,7 +20,7 @@ import { useCategories } from '@/hooks/use-admin';
 import { useDebounced } from '@/hooks/use-debounce';
 import { errorMessage } from '@/lib/api';
 import type { Question } from '@/lib/types';
-import { cn, fmtDate } from '@/lib/utils';
+import { cn, fmtDate, fmtTimer } from '@/lib/utils';
 import { adminApi, qk } from '@/services/admin';
 
 export const toPreview = (q: Question): PreviewQuestion => ({ ...q, categoryName: q.category.name });
@@ -32,7 +32,7 @@ export function TimerPill({ s, override }: { s: number; override?: boolean }) {
   return (
     <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[11.5px] font-semibold tabular', override ? 'border-gold/40 bg-gold/10 text-gold-bright' : 'border-line-2 bg-white/[0.03] text-fg-2')}>
       <Timer className="h-3 w-3 opacity-70" />
-      {s}s
+      {fmtTimer(s)}
     </span>
   );
 }

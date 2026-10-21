@@ -87,7 +87,7 @@ The compose stack runs MongoDB 7 as a single-node replica set (auto-initiated), 
 ### Candidates
 * No public registration. Management creates the account and the system generates `LIBRA-ADMIN-0001`-style usernames plus a high-entropy password, **shown once**, stored only as an Argon2id hash. Credentials can be replaced before an interview starts.
 * Cinematic sign-in, then a **security briefing** with interview details, the ten examination rules, consequences, live **system checks** (APIs, focus/visibility, latency, attempt availability, fullscreen) and two explicit acknowledgements. A confirmation dialog consumes the single attempt only when the candidate presses **Start interview**.
-* One question at a time with a **server-authoritative** per-question timer (30–60s), circular + digital countdown (gold → amber < 15s → red < 10s → pulse ≤ 5s), debounced autosave with stale-write protection, automatic submission at zero, no going back.
+* One question at a time with a **server-authoritative** per-question timer (30 s – 5 min, default 3 min), circular + digital countdown (gold → amber < 15s → red < 10s → pulse ≤ 5s), debounced autosave with stale-write protection, automatic submission at zero, no going back.
 * Tab hidden / window blur / page exit → interface freezes, the server **disqualifies, locks the attempt and revokes the session**. Reloading or opening a second tab is detected server-side. Closing the browser or losing connection is caught by **heartbeat expiry**.
 * Diagonal forensic **watermark** (username, candidate ID, attempt reference, live UTC timestamp), copy/paste/context-menu/print blocking (logged as warnings, not as primary controls).
 * Completion, *Interview terminated*, *Interview access revoked* and *Session expired* screens.
@@ -95,7 +95,7 @@ The compose stack runs MongoDB 7 as a single-node replica set (auto-initiated), 
 ### Staff (Head Admin + Support Curator)
 * **Dashboard** — KPIs, completion trends, outcome distribution, score histogram, hardest questions, category performance, response timing, disqualification trend, live activity feed — all from real data.
 * **Candidates** — searchable/filterable list, full profile (identity, assignments, attempt summary, security evidence, lifecycle timeline, sign-in history, evaluation notes), assign/cancel interviews, replace credentials, disable/archive (history is never deleted).
-* **Question bank** — create/edit (versioned)/duplicate/delete (soft), 5 question types, configurable categories, difficulty, 30–60s timer, max score, rubric/answer key, candidate-view preview, drag-and-drop reordering.
+* **Question bank** — create/edit (versioned)/duplicate/delete (soft), 5 question types, configurable categories, difficulty, 30 s – 5 min timer, max score, rubric/answer key, candidate-view preview, drag-and-drop reordering.
 * **Interview builder** — three-panel visual builder (bank · sequence · settings), per-interview timer overrides, passing threshold, availability window, preview, **immutable published versions**.
 * **Live monitoring** — SSE-driven table of active interviews (progress, live per-question countdown, heartbeat connection state, warnings) and a real-time event log; terminate an attempt with a recorded reason.
 * **Evaluation** — side-by-side answer/rubric review, per-question marks and notes, auto-graded objective items, decision (Passed / Failed / Under review / Disqualified), optimistic concurrency, append-only **revision history**. Only a Head Admin can overturn a disqualification, with justification.
