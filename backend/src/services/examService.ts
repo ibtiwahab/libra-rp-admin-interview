@@ -15,6 +15,7 @@ import {
   Answer,
   Assignment,
   Attempt,
+  Candidate,
   InterviewVersion,
   type AnswerDoc,
   type AttemptDoc,
@@ -22,7 +23,7 @@ import {
 } from '../models';
 import { revokeAllSessions, revokeSession } from '../security/sessions';
 import { hmac, safeEqual, shortCode } from '../utils/crypto';
-import { AppError, badRequest, conflict, forbidden, gone } from '../utils/errors';
+import { AppError, badRequest, conflict, forbidden, gone, notFound } from '../utils/errors';
 import type { heartbeatSchema, saveAnswerSchema, securityEventSchema, startSchema, submitAnswerSchema } from '../validators/exam';
 import { logSecurityEvent } from './logService';
 
@@ -455,8 +456,9 @@ export async function getStatus(ctx: CandidateContext) {
     : null;
 
   if (assignment.status === 'NOT_STARTED') {
-    const w = version ? windowState(version, assignment.startDeadline) : 'CLOSED';
-    return { ...base, state: 'NOT_STARTED' as const, window: w, startDeadline: assignment.startDeadline, interview };
+    const resume = await resumeInfo(assignment.attemptId);
+    const w = resume ? windowState({}, assignment.startDeadline) : version ? windowState(version, assignment.startDeadline) : 'CLOSED';
+    return { ...base, state: 'NOT_STARTED' as const, window: w, startDeadline: assignment.startDeadline, interview, resume };
   }
 
   const attempt = assignment.attemptId ? await Attempt.findById(assignment.attemptId).lean() : null;
@@ -476,6 +478,7 @@ export async function getInstructions(ctx: CandidateContext) {
   const v = await InterviewVersion.findById(assignment.interviewVersionId).lean();
   if (!v) throw conflict('Interview unavailable', 'NO_PENDING_INTERVIEW');
   const timers = v.questions.map((q) => q.timeLimitSeconds);
+  const resume = await resumeInfo(assignment.attemptId);
   return {
     interview: {
       title: v.title,
@@ -490,8 +493,9 @@ export async function getInstructions(ctx: CandidateContext) {
       categories: [...new Set(v.questions.map((q) => q.categoryName))],
       availableUntil: v.availableUntil,
     },
-    window: windowState(v, assignment.startDeadline),
+    window: resume ? windowState({}, assignment.startDeadline) : windowState(v, assignment.startDeadline),
     startDeadline: assignment.startDeadline,
+    resume,
     policy: {
       heartbeatIntervalSeconds: env.HEARTBEAT_INTERVAL_SECONDS,
       heartbeatTimeoutSeconds: env.HEARTBEAT_TIMEOUT_SECONDS,
@@ -517,6 +521,7 @@ export async function startAttempt(ctx: CandidateContext, input: StartInput) {
     await logSecurityEvent({ eventType: 'STALE_SESSION_REQUEST', source: 'SERVER', severity: 'WARNING', candidateId: candidate._id, attemptId: pending.attemptId, message: 'Start requested for an attempt that already began' });
     throw conflict('Your interview attempt has already been used', 'ATTEMPT_ALREADY_CONSUMED');
   }
+  if (pending.attemptId) return resumeAttempt(ctx, input, { _id: pending._id, attemptId: pending.attemptId, startDeadline: pending.startDeadline });
   const version = await InterviewVersion.findById(pending.interviewVersionId).lean();
   if (!version || !version.questions.length) throw conflict('Interview unavailable', 'NO_PENDING_INTERVIEW');
   const w = windowState(version, pending.startDeadline);
@@ -867,9 +872,176 @@ export async function expireStaleAssignments(): Promise<number> {
   const res = await Assignment.updateMany(
     {
       status: 'NOT_STARTED',
+      attemptId: null,
       $or: [{ startDeadline: { $ne: null, $lt: now } }, { interviewVersionId: { $in: closedVersions.map((v) => v._id) } }],
     },
     { $set: { status: 'EXPIRED', isOpen: false, closedAt: now } },
   );
-  return res.modifiedCount;
+  // A reopened attempt that was not continued in time simply goes back to how it ended.
+  const lapsed = await Assignment.find({ status: 'NOT_STARTED', attemptId: { $ne: null }, startDeadline: { $ne: null, $lt: now } }, { attemptId: 1 }).lean();
+  let withdrawn = 0;
+  for (const a of lapsed) if (await withdrawResume(a.attemptId!, 'the candidate did not continue within the allowed time')) withdrawn++;
+  return res.modifiedCount + withdrawn;
+}
+
+// ───────────────────────────── continuing after an interruption ─────────────────────────────
+
+/** How long a candidate has to continue after staff allow it. */
+export const RESUME_WINDOW_HOURS = 24;
+
+async function resumeInfo(attemptId: Types.ObjectId | null | undefined) {
+  if (!attemptId) return null;
+  const a = await Attempt.findOne({ _id: attemptId, resumePending: true }, { interruptions: 1, totalQuestions: 1 }).lean();
+  const last = a?.interruptions.at(-1);
+  return a && last ? { fromQuestion: last.resumeFromIndex + 1, totalQuestions: a.totalQuestions } : null;
+}
+
+/**
+ * Staff allow a candidate whose attempt was disqualified or ended by a disconnection to continue
+ * it. The question they were on stays closed with whatever they had written (the evaluator scores
+ * it); they continue from the next question with fresh timers. Answers already given cannot be
+ * changed. The candidate has RESUME_WINDOW_HOURS to sign in again and continue.
+ */
+export async function allowResume(attemptId: string, actor: { _id: Types.ObjectId; fullName: string }, reason: string) {
+  const out = await withTransaction(async (session) => {
+    const now = new Date();
+    const attempt = await Attempt.findById(attemptId).session(session);
+    if (!attempt) throw notFound('Interview attempt not found');
+    if (attempt.status !== 'DISQUALIFIED' && attempt.status !== 'EXPIRED') {
+      throw conflict('Only disqualified or disconnected attempts can be continued', 'ATTEMPT_NOT_RESUMABLE');
+    }
+    if (attempt.resumePending) throw conflict('This candidate is already allowed to continue', 'RESUME_ALREADY_ALLOWED');
+    if (attempt.evaluatedAt) throw conflict('This attempt has already been evaluated, so it can no longer be continued', 'ATTEMPT_ALREADY_EVALUATED');
+    const candidate = await Candidate.findById(attempt.candidateId, { status: 1 }).session(session).lean();
+    if (candidate?.status !== 'ACTIVE') throw badRequest('The candidate account is not active', 'CANDIDATE_INACTIVE');
+
+    const reached = await Answer.exists({ attemptId: attempt._id, questionIndex: attempt.currentQuestionIndex }).session(session);
+    const from = reached ? attempt.currentQuestionIndex + 1 : attempt.currentQuestionIndex;
+    if (from >= attempt.totalQuestions) {
+      throw conflict('The interview ended on its last question, so there is nothing left to continue', 'NO_QUESTIONS_LEFT');
+    }
+
+    const deadline = new Date(now.getTime() + RESUME_WINDOW_HOURS * 3600_000);
+    const reopened = await Assignment.updateOne(
+      { _id: attempt.assignmentId, status: attempt.status },
+      { $set: { status: 'NOT_STARTED', isOpen: true, closedAt: null, startDeadline: deadline } },
+      { session },
+    ).catch((err) => {
+      if (err?.code === 11000) throw conflict('This candidate has another open interview. Cancel it first.', 'ASSIGNMENT_EXISTS');
+      throw err;
+    });
+    if (reopened.modifiedCount !== 1) throw conflict('This interview can no longer be reopened', 'ATTEMPT_NOT_RESUMABLE');
+
+    const plain = attempt.toObject();
+    const moved = await Attempt.updateOne(
+      // $ne rather than false: attempts saved before this feature have no resumePending field.
+      { _id: attempt._id, status: attempt.status, resumePending: { $ne: true } },
+      {
+        $set: { resumePending: true },
+        $push: {
+          interruptions: {
+            status: plain.status,
+            endReason: plain.endReason ?? null,
+            endedAt: plain.endedAt ?? null,
+            violation: plain.securityViolation ?? null,
+            resumeFromIndex: from,
+            allowedBy: actor._id,
+            allowedByName: actor.fullName,
+            allowedAt: now,
+            reason,
+          },
+        },
+      },
+      { session },
+    );
+    if (moved.modifiedCount !== 1) throw new AppError(409, 'CONCURRENT_TRANSITION', 'The attempt changed, try again');
+    return { attempt: plain, from, deadline };
+  });
+
+  await flushEvents(out.attempt, [
+    {
+      eventType: 'RESUME_ALLOWED',
+      source: 'ADMIN',
+      severity: 'WARNING',
+      questionIndex: out.from,
+      message: `${actor.fullName} allowed the candidate to continue from question ${out.from + 1} — ${reason}`,
+      metadata: { previousStatus: out.attempt.status, deadline: out.deadline.toISOString() },
+    },
+  ]);
+  return { attempt: out.attempt, fromQuestion: out.from + 1, deadline: out.deadline };
+}
+
+/** Takes back a permission to continue that was not used; the attempt returns to how it ended. */
+export async function withdrawResume(attemptId: Types.ObjectId, why: string): Promise<boolean> {
+  let ref: { _id: Types.ObjectId; candidateId: Types.ObjectId } | null = null;
+  const done = await withTransaction(async (session) => {
+    const attempt = await Attempt.findOne({ _id: attemptId, resumePending: true }).session(session);
+    if (!attempt) return false;
+    const now = new Date();
+    const res = await Assignment.updateOne({ _id: attempt.assignmentId, status: 'NOT_STARTED' }, { $set: { status: attempt.status, isOpen: false, closedAt: now } }, { session });
+    if (res.modifiedCount !== 1) return false;
+    await Attempt.updateOne(
+      { _id: attempt._id, resumePending: true },
+      { $set: { resumePending: false, [`interruptions.${attempt.interruptions.length - 1}.withdrawnAt`]: now } },
+      { session },
+    );
+    ref = { _id: attempt._id, candidateId: attempt.candidateId };
+    return true;
+  });
+  if (done && ref) await flushEvents(ref, [{ eventType: 'RESUME_WITHDRAWN', source: 'SERVER', message: `Permission to continue withdrawn — ${why}` }]);
+  return done;
+}
+
+async function resumeAttempt(ctx: CandidateContext, input: StartInput, pending: { _id: Types.ObjectId; attemptId: Types.ObjectId; startDeadline?: Date | null }) {
+  const { candidate, session } = ctx;
+  if (pending.startDeadline && pending.startDeadline < new Date()) throw forbidden('The time allowed to continue this interview has passed', 'WINDOW_CLOSED');
+  const events: PendingEvent[] = [];
+
+  await withTransaction(async (tx) => {
+    events.length = 0;
+    const now = new Date();
+    const claimed = await Assignment.findOneAndUpdate({ _id: pending._id, candidateId: candidate._id, status: 'NOT_STARTED' }, { $set: { status: 'IN_PROGRESS' } }, { new: true, session: tx });
+    if (!claimed) throw conflict('Your interview attempt has already been used', 'ATTEMPT_ALREADY_CONSUMED');
+    const attempt = await Attempt.findOne({ _id: pending.attemptId, candidateId: candidate._id, resumePending: true }).session(tx);
+    const last = attempt ? attempt.interruptions.length - 1 : -1;
+    if (!attempt || last < 0) throw conflict('There is no interview awaiting your start', 'NO_PENDING_INTERVIEW');
+    const from = attempt.interruptions[last]!.resumeFromIndex;
+
+    const version = await InterviewVersion.findById(attempt.interviewVersionId, { questions: 1 }).session(tx).lean();
+    const nextQ = version?.questions.find((q) => q.order === from) ?? version?.questions[from];
+    if (!version || !nextQ) throw new AppError(500, 'VERSION_CORRUPT', 'Interview version is missing a question');
+    const remaining = version.questions.slice(from);
+    const ceilingMs = remaining.reduce((s, q) => s + q.timeLimitSeconds, 0) * 1000 + remaining.length * (GRACE() + 5000) + 60_000;
+
+    const res = await Attempt.updateOne(
+      { _id: attempt._id, resumePending: true },
+      {
+        $set: {
+          status: 'IN_PROGRESS',
+          endReason: null,
+          endedAt: null,
+          result: 'PENDING',
+          securityViolation: null,
+          currentQuestionIndex: from,
+          sessionId: session._id,
+          instanceHash: instanceHash(input.instanceId),
+          lastHeartbeatAt: now,
+          expiresAt: new Date(now.getTime() + ceilingMs),
+          resumePending: false,
+          [`interruptions.${last}.resumedAt`]: now,
+        },
+      },
+      { session: tx },
+    );
+    if (res.modifiedCount !== 1) throw conflict('Your interview attempt has already been used', 'ATTEMPT_ALREADY_CONSUMED');
+    await Answer.create([activationFor(attempt._id, candidate._id, nextQ, from, now)], { session: tx });
+    events.push(
+      { eventType: 'INTERVIEW_RESUMED', source: 'SERVER', severity: 'WARNING', questionIndex: from, message: `Interview continued from question ${from + 1} (allowed by ${attempt.interruptions[last]!.allowedByName})`, metadata: { preflight: input.preflight } },
+      { eventType: 'QUESTION_STARTED', source: 'SERVER', questionIndex: from, questionId: nextQ.questionId, message: `Question ${from + 1} started`, metadata: { allowedSeconds: nextQ.timeLimitSeconds } },
+    );
+  });
+
+  await revokeAllSessions('CANDIDATE', candidate._id, 'EXAM_BOUND_TO_OTHER_SESSION', { exceptId: session._id });
+  await flushEvents({ _id: pending.attemptId, candidateId: candidate._id }, events);
+  return currentQuestion(ctx, input.instanceId);
 }

@@ -80,6 +80,7 @@ export function apiRouter(): Router {
 
   staff.get('/attempts', admin.listAttempts);
   staff.post('/attempts/:id/terminate', admin.terminateAttempt);
+  staff.post('/attempts/:id/allow-resume', admin.allowResume);
 
   staff.get('/categories', admin.listCategories);
   staff.post('/categories', admin.createCategory);

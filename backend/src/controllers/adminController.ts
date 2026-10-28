@@ -5,7 +5,7 @@ import * as candidates from '../services/candidateService';
 import * as categories from '../services/categoryService';
 import * as curators from '../services/curatorService';
 import * as evaluations from '../services/evaluationService';
-import { adminTerminate } from '../services/examService';
+import { adminTerminate, allowResume as allowResumeSvc } from '../services/examService';
 import * as exportSvc from '../services/exportService';
 import * as interviews from '../services/interviewService';
 import { audit } from '../services/logService';
@@ -53,6 +53,19 @@ export const terminateAttempt = async (req: Request, res: Response) => {
   const attempt = await adminTerminate(id(req), reason);
   await audit(req, { action: 'ATTEMPT_TERMINATED', targetType: 'InterviewAttempt', targetId: attempt._id, targetLabel: `${attempt.candidateSnapshot.candidateCode} · ${attempt.referenceCode}`, details: { reason } });
   res.status(204).end();
+};
+
+export const allowResume = async (req: Request, res: Response) => {
+  const { reason } = terminateSchema.parse(req.body);
+  const out = await allowResumeSvc(id(req), req.admin!.user, reason);
+  await audit(req, {
+    action: 'ATTEMPT_RESUME_ALLOWED',
+    targetType: 'InterviewAttempt',
+    targetId: out.attempt._id,
+    targetLabel: `${out.attempt.candidateSnapshot.candidateCode} · ${out.attempt.referenceCode}`,
+    details: { reason, previousStatus: out.attempt.status, fromQuestion: out.fromQuestion, deadline: out.deadline.toISOString() },
+  });
+  res.json({ fromQuestion: out.fromQuestion, deadline: out.deadline });
 };
 
 // ── Categories ──

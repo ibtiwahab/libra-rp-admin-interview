@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertOctagon, CheckCircle2, Clock, Flag, LogIn, LogOut, Play, Save, ShieldAlert, ShieldX, TimerOff, Wifi, XCircle } from 'lucide-react';
+import { AlertOctagon, CheckCircle2, Clock, Flag, LogIn, LogOut, Play, RotateCcw, Save, ShieldAlert, ShieldX, TimerOff, Wifi, XCircle } from 'lucide-react';
 import type { SecurityEventRow } from '@/lib/types';
 import { cn, fmtTime, humanize } from '@/lib/utils';
 
@@ -17,6 +17,8 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   INTERVIEW_DISQUALIFIED: ShieldX,
   INTERVIEW_TERMINATED_BY_ADMIN: ShieldX,
   INTERVIEW_EXPIRED: Clock,
+  RESUME_ALLOWED: RotateCcw,
+  INTERVIEW_RESUMED: Play,
   SESSION_TIMEOUT: Wifi,
   TAB_HIDDEN: AlertOctagon,
   WINDOW_BLURRED: AlertOctagon,

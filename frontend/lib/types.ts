@@ -134,6 +134,19 @@ export interface CandidateRow {
   attempt: { id: string; status: AttemptStatus; result: Result; percentage: number | null; totalScore: number | null; maxScore: number | null; progress: number; totalQuestions: number; violation: string | null } | null;
 }
 
+export interface Interruption {
+  status: 'DISQUALIFIED' | 'EXPIRED';
+  endReason: string | null;
+  endedAt: string | null;
+  violation: Violation | null;
+  resumeFromQuestion: number;
+  allowedBy: string;
+  allowedAt: string;
+  reason: string;
+  resumedAt: string | null;
+  withdrawnAt: string | null;
+}
+
 export interface Violation {
   type: string;
   source: string;
@@ -195,6 +208,8 @@ export interface CandidateProfile extends Omit<CandidateRow, 'assignment' | 'att
       result: Result;
       securityViolation: Violation | null;
       warningCount: number;
+      resumePending: boolean;
+      interruptions: Interruption[];
       evaluatedBy: string | null;
       evaluatedAt: string | null;
     } | null;
@@ -220,6 +235,8 @@ export interface AttemptSummary {
   result: Result;
   securityViolation: Violation | null;
   warningCount: number;
+  resumePending: boolean;
+  interruptions: Interruption[];
   evaluatedBy: { id: string; fullName: string } | null;
   evaluatedAt: string | null;
   evaluationRevision: number;

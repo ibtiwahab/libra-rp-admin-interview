@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Answer, Assignment, Attempt, SecurityEvent, Session } from '../src/models';
-import { reconcileAll } from '../src/services/examService';
+import { expireStaleAssignments, reconcileAll } from '../src/services/examService';
 import { Client, PREFLIGHT, candidateClient, examScenario, expireActiveQuestion, startExam, useDatabase } from './helpers';
 
 useDatabase();
@@ -430,5 +430,109 @@ describe('administrative termination', () => {
     expect(a!.status).toBe('DISQUALIFIED');
     expect(a!.endReason).toBe('ADMIN_TERMINATED');
     expect((await admin.get('/api/monitor/active')).body.items).toHaveLength(0);
+  });
+});
+
+describe('continuing after a disqualification or disconnection', () => {
+  const allow = (c: Client, attemptId: string, reason = 'Game crashed, confirmed on Discord') => c.post(`/api/attempts/${attemptId}/allow-resume`, { reason });
+
+  it('a disqualified candidate continues from the next question once staff allow it', async () => {
+    const { admin, candidate, cand } = await examScenario([{}, {}, {}, {}]);
+    const s = await startExam(candidate);
+    await submit(candidate, 0, 1, 'answer one');
+    await save(candidate, 1, 1, 'half written');
+    await candidate.post('/api/exam/security-event', { type: 'TAB_HIDDEN', questionIndex: 1, clientTimestamp: new Date().toISOString() });
+    const id = s.body.attempt.id;
+
+    const r = await allow(admin, id);
+    expect(r.status).toBe(200);
+    expect(r.body.fromQuestion).toBe(3);
+    expect((await allow(admin, id)).status).toBe(409);
+
+    const back = await candidateClient(cand.credentials);
+    const st = await back.get('/api/exam/status');
+    expect(st.body.state).toBe('NOT_STARTED');
+    expect(st.body.resume).toEqual({ fromQuestion: 3, totalQuestions: 4 });
+    expect((await back.get('/api/exam/instructions')).body.resume.fromQuestion).toBe(3);
+
+    const go = await startExam(back);
+    expect(go.status).toBe(201);
+    expect(go.body.attempt.id).toBe(id);
+    expect(go.body.question.index).toBe(2);
+    // earlier answers stay closed and unchanged
+    expect((await submit(back, 1, 5, 'rewrite')).body.submission).not.toBe('ACCEPTED');
+    expect((await Answer.findOne({ attemptId: id, questionIndex: 1 }).lean())!.answerText).toBe('half written');
+
+    await submit(back, 2, 1, 'answer three');
+    await submit(back, 3, 1, 'answer four');
+    const a = await Attempt.findById(id).lean();
+    expect(a!.status).toBe('COMPLETED');
+    expect(a!.result).toBe('PENDING');
+    expect(a!.securityViolation).toBeNull();
+    expect(a!.interruptions).toHaveLength(1);
+    expect(a!.interruptions[0]!.violation!.type).toBe('TAB_HIDDEN');
+    expect(a!.interruptions[0]!.resumedAt).toBeInstanceOf(Date);
+    expect(await Attempt.countDocuments()).toBe(1);
+    expect(await SecurityEvent.countDocuments({ eventType: 'RESUME_ALLOWED' })).toBe(1);
+    expect(await SecurityEvent.countDocuments({ eventType: 'INTERVIEW_RESUMED' })).toBe(1);
+  });
+
+  it('a disconnected (heartbeat timeout) candidate can continue too', async () => {
+    const { admin, candidate, cand } = await examScenario();
+    const s = await startExam(candidate);
+    await Attempt.updateOne({ _id: s.body.attempt.id }, { $set: { lastHeartbeatAt: new Date(Date.now() - 60_000) } });
+    await reconcileAll();
+    expect((await allow(admin, s.body.attempt.id)).body.fromQuestion).toBe(2);
+    const back = await candidateClient(cand.credentials);
+    const go = await startExam(back);
+    expect(go.body.question.index).toBe(1);
+    expect((await Assignment.findOne().lean())!.status).toBe('IN_PROGRESS');
+  });
+
+  it('refuses completed, evaluated or last-question attempts', async () => {
+    const { admin, candidate } = await examScenario([{}]);
+    const s = await startExam(candidate);
+    await candidate.post('/api/exam/security-event', { type: 'TAB_HIDDEN', questionIndex: 0, clientTimestamp: new Date().toISOString() });
+    const r = await allow(admin, s.body.attempt.id);
+    expect(r.status).toBe(409);
+    expect(r.body.error.code).toBe('NO_QUESTIONS_LEFT');
+    await Attempt.updateOne({ _id: s.body.attempt.id }, { $set: { evaluatedAt: new Date() } });
+    expect((await allow(admin, s.body.attempt.id)).body.error.code).toBe('ATTEMPT_ALREADY_EVALUATED');
+  });
+
+  it('staff can withdraw the permission, and it lapses after the allowed time', async () => {
+    const { admin, candidate, cand } = await examScenario();
+    const s = await startExam(candidate);
+    await candidate.post('/api/exam/security-event', { type: 'WINDOW_BLURRED', questionIndex: 0, clientTimestamp: new Date().toISOString() });
+    const id = s.body.attempt.id;
+    await allow(admin, id);
+    const asg = await Assignment.findOne().lean();
+    expect((await admin.delete(`/api/assignments/${asg!._id}`)).status).toBe(204);
+    expect((await Assignment.findById(asg!._id).lean())!.status).toBe('DISQUALIFIED');
+    const back = await candidateClient(cand.credentials);
+    expect((await back.get('/api/exam/status')).body.state).toBe('DISQUALIFIED');
+    expect((await startExam(back)).status).toBe(409);
+
+    // allowed again, but the 24 hours pass without the candidate continuing
+    expect((await allow(admin, id)).status).toBe(200);
+    await Assignment.updateOne({ _id: asg!._id }, { $set: { startDeadline: new Date(Date.now() - 1000) } });
+    await expireStaleAssignments();
+    const after = await Attempt.findById(id).lean();
+    expect(after!.resumePending).toBe(false);
+    expect(after!.status).toBe('DISQUALIFIED');
+    expect(after!.interruptions.map((i) => Boolean(i.withdrawnAt))).toEqual([true, true]);
+    expect((await Assignment.findById(asg!._id).lean())!.isOpen).toBe(false);
+  });
+});
+
+describe('continuing — attempts saved before the feature existed', () => {
+  it('works on attempts that have no resumePending / interruptions fields', async () => {
+    const { admin, candidate } = await examScenario();
+    const s = await startExam(candidate);
+    await candidate.post('/api/exam/security-event', { type: 'TAB_HIDDEN', questionIndex: 0, clientTimestamp: new Date().toISOString() });
+    await Attempt.collection.updateOne({ _id: new (await import('mongoose')).Types.ObjectId(s.body.attempt.id) }, { $unset: { resumePending: '', interruptions: '' } });
+    const r = await admin.post(`/api/attempts/${s.body.attempt.id}/allow-resume`, { reason: 'Old record check' });
+    expect(r.status).toBe(200);
+    expect((await Attempt.findById(s.body.attempt.id).lean())!.interruptions).toHaveLength(1);
   });
 });

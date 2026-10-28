@@ -19,6 +19,7 @@ import { generatePassword } from '../utils/crypto';
 import { badRequest, conflict, notFound } from '../utils/errors';
 import { escapeRegex, paged } from '../utils/pagination';
 import type { createCandidateSchema, listCandidatesSchema, updateCandidateSchema } from '../validators/candidates';
+import { withdrawResume } from './examService';
 import { audit, logSecurityEvent } from './logService';
 
 type CreateInput = z.infer<typeof createCandidateSchema>;
@@ -101,6 +102,13 @@ export async function assignInterview(req: Request, candidateId: string, templat
 }
 
 export async function cancelAssignment(req: Request, assignmentId: string) {
+  // A reopened attempt is not cancelled: the permission to continue is withdrawn instead.
+  const reopened = await Assignment.findOne({ _id: assignmentId, status: 'NOT_STARTED', attemptId: { $ne: null } }).lean();
+  if (reopened) {
+    if (!(await withdrawResume(reopened.attemptId!, `withdrawn by ${req.admin!.user.fullName}`))) throw conflict('This permission to continue was already used or withdrawn', 'ASSIGNMENT_NOT_CANCELLABLE');
+    await audit(req, { action: 'ASSIGNMENT_CANCELLED', targetType: 'Candidate', targetId: reopened.candidateId, details: { assignmentId, resumeWithdrawn: true } });
+    return;
+  }
   const a = await Assignment.findOneAndUpdate(
     { _id: assignmentId, status: 'NOT_STARTED' },
     { $set: { status: 'CANCELLED', isOpen: false, closedAt: new Date(), cancelledBy: req.admin!.user._id } },
@@ -108,6 +116,21 @@ export async function cancelAssignment(req: Request, assignmentId: string) {
   );
   if (!a) throw conflict('Only assignments that have not started can be cancelled', 'ASSIGNMENT_NOT_CANCELLABLE');
   await audit(req, { action: 'ASSIGNMENT_CANCELLED', targetType: 'Candidate', targetId: a.candidateId, details: { assignmentId } });
+}
+
+export function interruptionDto(i: any) {
+  return {
+    status: i.status,
+    endReason: i.endReason,
+    endedAt: i.endedAt,
+    violation: i.violation ?? null,
+    resumeFromQuestion: i.resumeFromIndex + 1,
+    allowedBy: i.allowedByName,
+    allowedAt: i.allowedAt,
+    reason: i.reason,
+    resumedAt: i.resumedAt ?? null,
+    withdrawnAt: i.withdrawnAt ?? null,
+  };
 }
 
 // ───────────────────────────── Candidates ─────────────────────────────
@@ -339,6 +362,8 @@ export async function getCandidate(id: string) {
               result: t.result,
               securityViolation: t.securityViolation,
               warningCount: t.warningCount,
+              resumePending: t.resumePending ?? false,
+              interruptions: (t.interruptions ?? []).map(interruptionDto),
               evaluatedBy: t.evaluatedBy?.fullName ?? null,
               evaluatedAt: t.evaluatedAt,
             }

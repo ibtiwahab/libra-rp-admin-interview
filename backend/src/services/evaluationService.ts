@@ -6,7 +6,7 @@ import { Answer, Attempt, CandidateNote, Evaluation, InterviewVersion, SecurityE
 import { badRequest, conflict, forbidden, notFound } from '../utils/errors';
 import { escapeRegex, paged } from '../utils/pagination';
 import type { listAttemptsSchema, saveEvaluationSchema } from '../validators/evaluations';
-import { eventDto } from './candidateService';
+import { eventDto, interruptionDto } from './candidateService';
 import { audit } from './logService';
 
 type SaveInput = z.infer<typeof saveEvaluationSchema>;
@@ -26,9 +26,9 @@ export function attemptFilter(input: Partial<ListInput>) {
   if (input.result) f.result = input.result;
   if (input.templateId) f.templateId = new Types.ObjectId(input.templateId);
   if (input.evaluatorId) f.evaluatedBy = new Types.ObjectId(input.evaluatorId);
-  if (input.security === 'VIOLATION') f.securityViolation = { $ne: null };
-  if (input.security === 'WARNINGS') Object.assign(f, { securityViolation: null, warningCount: { $gt: 0 } });
-  if (input.security === 'CLEAN') Object.assign(f, { securityViolation: null, warningCount: 0 });
+  if (input.security === 'VIOLATION') f.$and = [{ $or: [{ securityViolation: { $ne: null } }, { 'interruptions.0': { $exists: true } }] }];
+  if (input.security === 'WARNINGS') Object.assign(f, { securityViolation: null, 'interruptions.0': { $exists: false }, warningCount: { $gt: 0 } });
+  if (input.security === 'CLEAN') Object.assign(f, { securityViolation: null, 'interruptions.0': { $exists: false }, warningCount: 0 });
   if (input.from || input.to) {
     f.startedAt = { ...(input.from ? { $gte: input.from } : {}), ...(input.to ? { $lte: input.to } : {}) };
   }
@@ -63,6 +63,8 @@ export function attemptSummaryDto(a: any) {
     result: a.result,
     securityViolation: a.securityViolation,
     warningCount: a.warningCount,
+    resumePending: a.resumePending ?? false,
+    interruptions: (a.interruptions ?? []).map(interruptionDto),
     evaluatedBy: a.evaluatedBy?.fullName ? { id: String(a.evaluatedBy._id), fullName: a.evaluatedBy.fullName } : null,
     evaluatedAt: a.evaluatedAt,
     evaluationRevision: a.evaluationRevision,

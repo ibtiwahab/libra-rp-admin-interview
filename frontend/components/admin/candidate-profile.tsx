@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArrowLeft, ClipboardList, Download, FileSearch, KeyRound, MessageSquarePlus, Pencil, PauseCircle, PlayCircle, ShieldAlert, ShieldCheck, Square, UserRound, XCircle } from 'lucide-react';
+import { Archive, ArrowLeft, ClipboardList, Download, FileSearch, KeyRound, MessageSquarePlus, Pencil, PauseCircle, PlayCircle, RotateCcw, ShieldAlert, ShieldCheck, Square, UserRound, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 import { AssignDialog, ROLES } from '@/components/admin/candidate-dialogs';
 import { ConfirmDialog, CredentialsDialog } from '@/components/admin/common';
+import { InterruptionList } from '@/components/admin/interruptions';
 import { Panel } from '@/components/admin/shell';
 import { EventTimeline } from '@/components/admin/timeline';
 import { Button } from '@/components/ui/button';
@@ -29,7 +30,7 @@ export function CandidateProfilePage({ id }: { id: string }) {
   const { data: c, isLoading, error } = useQuery({ queryKey: qk.candidate(id), queryFn: () => adminApi.candidate(id), refetchInterval: (q) => (q.state.data?.assignments.some((a) => a.status === 'IN_PROGRESS') ? 5000 : false) });
   const [assignOpen, setAssignOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [confirm, setConfirm] = useState<null | 'archive' | 'regen' | { cancel: string } | { terminate: string }>(null);
+  const [confirm, setConfirm] = useState<null | 'archive' | 'regen' | { cancel: string; resume?: boolean } | { terminate: string } | { allow: string; from: number }>(null);
   const [creds, setCreds] = useState<Credentials | null>(null);
   const [note, setNote] = useState('');
 
@@ -51,6 +52,8 @@ export function CandidateProfilePage({ id }: { id: string }) {
           return adminApi.cancelAssignment(action.arg!);
         case 'terminate':
           return adminApi.terminate(action.arg!, action.reason!);
+        case 'allow':
+          return adminApi.allowResume(action.arg!, action.reason!);
         case 'note':
           return adminApi.addNote(id, { body: action.arg });
       }
@@ -60,7 +63,7 @@ export function CandidateProfilePage({ id }: { id: string }) {
       setConfirm(null);
       if (action.kind === 'regen') setCreds((r as { credentials: Credentials }).credentials);
       if (action.kind === 'note') setNote('');
-      const msg: Record<string, string> = { archive: 'Candidate archived', toggle: 'Access updated', cancel: 'Assignment cancelled', terminate: 'Attempt terminated', note: 'Note added' };
+      const msg: Record<string, string> = { archive: 'Candidate archived', toggle: 'Access updated', cancel: 'Done', terminate: 'Attempt terminated', allow: 'The candidate can now continue the interview', note: 'Note added' };
       if (msg[action.kind]) toast.success(msg[action.kind]);
     },
     onError: (e) => toast.error(errorMessage(e)),
@@ -69,6 +72,8 @@ export function CandidateProfilePage({ id }: { id: string }) {
   if (isLoading) return <div className="grid h-[60vh] place-items-center"><Spinner /></div>;
   if (error || !c) return <EmptyState title="Candidate not found" action={<Button onClick={() => router.push('/admin/candidates')}>Back to candidates</Button>} />;
 
+  const allowing = confirm && typeof confirm === 'object' && 'allow' in confirm ? confirm : null;
+  const cancelling = confirm && typeof confirm === 'object' && 'cancel' in confirm ? confirm : null;
   const current = c.assignments[0];
   const attempt = current?.attempt;
   const hasOpen = c.assignments.some((a) => a.status === 'NOT_STARTED' || a.status === 'IN_PROGRESS');
@@ -194,8 +199,9 @@ export function CandidateProfilePage({ id }: { id: string }) {
               key={a.id}
               a={a}
               primary={idx === 0}
-              onCancel={() => setConfirm({ cancel: a.id })}
+              onCancel={() => setConfirm({ cancel: a.id, resume: !!a.attempt })}
               onTerminate={() => a.attempt && setConfirm({ terminate: a.attempt.id })}
+              onAllowResume={(from) => a.attempt && setConfirm({ allow: a.attempt.id, from })}
             />
           ))}
 
@@ -221,6 +227,11 @@ export function CandidateProfilePage({ id }: { id: string }) {
                   </p>
                 </div>
               )}
+              {attempt.interruptions.length > 0 && (
+                <div className="mb-5">
+                  <InterruptionList items={attempt.interruptions} />
+                </div>
+              )}
               <p className="label-caps mb-2">Interview lifecycle</p>
               <div className="max-h-[420px] overflow-y-auto pr-2">
                 <EventTimeline events={c.events.filter((e) => e.attemptId === attempt.id)} dense />
@@ -241,11 +252,26 @@ export function CandidateProfilePage({ id }: { id: string }) {
       <ConfirmDialog open={confirm === 'archive'} onOpenChange={(o) => !o && setConfirm(null)} title="Archive candidate" description="Access is removed immediately and unstarted assignments are cancelled. Interview records are preserved permanently." confirmLabel="Archive" loading={run.isPending} onConfirm={() => run.mutate({ kind: 'archive' })} />
       <ConfirmDialog open={confirm === 'regen'} onOpenChange={(o) => !o && setConfirm(null)} tone="gold" title="Replace credentials" description="A new password is generated and the old one stops working immediately. Active sessions are signed out." confirmLabel="Generate" loading={run.isPending} onConfirm={() => run.mutate({ kind: 'regen' })} />
       <ConfirmDialog
-        open={!!confirm && typeof confirm === 'object' && 'cancel' in confirm}
+        open={!!allowing}
         onOpenChange={(o) => !o && setConfirm(null)}
-        title="Cancel assignment"
-        description="The candidate will no longer be able to start this interview. This cannot be undone, but you may assign a new interview afterwards."
-        confirmLabel="Cancel assignment"
+        tone="gold"
+        title="Allow the candidate to continue"
+        description={`The candidate signs in again and continues from question ${allowing?.from ?? ''} with fresh timers. Answers already given stay as they are, and the question they were on stays closed with what they had written. They have 24 hours to continue. Write why you are allowing it (e.g. game crash confirmed on Discord).`}
+        confirmLabel="Allow to continue"
+        requireReason
+        loading={run.isPending}
+        onConfirm={(reason) => allowing && run.mutate({ kind: 'allow', arg: allowing.allow, reason })}
+      />
+      <ConfirmDialog
+        open={!!cancelling}
+        onOpenChange={(o) => !o && setConfirm(null)}
+        title={cancelling?.resume ? 'Withdraw permission to continue' : 'Cancel assignment'}
+        description={
+          cancelling?.resume
+            ? 'The candidate will no longer be able to continue. The attempt goes back to how it ended.'
+            : 'The candidate will no longer be able to start this interview. This cannot be undone, but you may assign a new interview afterwards.'
+        }
+        confirmLabel={cancelling?.resume ? 'Withdraw' : 'Cancel assignment'}
         loading={run.isPending}
         onConfirm={() => confirm && typeof confirm === 'object' && 'cancel' in confirm && run.mutate({ kind: 'cancel', arg: confirm.cancel })}
       />
@@ -264,8 +290,12 @@ export function CandidateProfilePage({ id }: { id: string }) {
   );
 }
 
-function AssignmentPanel({ a, primary, onCancel, onTerminate }: { a: CandidateProfile['assignments'][number]; primary: boolean; onCancel: () => void; onTerminate: () => void }) {
+function AssignmentPanel({ a, primary, onCancel, onTerminate, onAllowResume }: { a: CandidateProfile['assignments'][number]; primary: boolean; onCancel: () => void; onTerminate: () => void; onAllowResume: (fromQuestion: number) => void }) {
   const t = a.attempt;
+  const waitingToContinue = a.status === 'NOT_STARTED' && !!t?.resumePending;
+  // The question the candidate was on stays closed, so they continue from the next one.
+  const nextQuestion = t ? t.currentQuestionIndex + 2 : 0;
+  const canContinue = primary && !!t && (t.status === 'DISQUALIFIED' || t.status === 'EXPIRED') && a.status === t.status && !t.evaluatedAt && nextQuestion <= t.totalQuestions;
   const [busy, setBusy] = useState(false);
   return (
     <Panel
@@ -349,11 +379,25 @@ function AssignmentPanel({ a, primary, onCancel, onTerminate }: { a: CandidatePr
         </div>
       )}
 
+      {waitingToContinue && t && (
+        <p className="mt-4 rounded-[10px] border border-azure/30 bg-azure/[0.07] px-4 py-3 text-[13px] text-fg-2">
+          Allowed to continue from question {t.interruptions.at(-1)?.resumeFromQuestion} — waiting for the candidate to sign in{a.startDeadline ? ` (until ${fmtDateTime(a.startDeadline)})` : ''}.
+        </p>
+      )}
+
+      {canContinue && (
+        <div className="mt-4 flex justify-end">
+          <Button variant="outline" size="sm" onClick={() => onAllowResume(nextQuestion)}>
+            <RotateCcw className="h-4 w-4" /> Allow to continue
+          </Button>
+        </div>
+      )}
+
       {(a.status === 'NOT_STARTED' || a.status === 'IN_PROGRESS') && (
         <div className="mt-4 flex justify-end gap-2">
           {a.status === 'NOT_STARTED' && (
             <Button variant="danger-ghost" size="sm" onClick={onCancel}>
-              <XCircle className="h-4 w-4" /> Cancel assignment
+              <XCircle className="h-4 w-4" /> {waitingToContinue ? 'Withdraw permission' : 'Cancel assignment'}
             </Button>
           )}
           {a.status === 'IN_PROGRESS' && (

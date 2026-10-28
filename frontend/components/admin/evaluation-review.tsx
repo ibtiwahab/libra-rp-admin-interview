@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Panel } from '@/components/admin/shell';
+import { InterruptionList } from '@/components/admin/interruptions';
 import { EventTimeline } from '@/components/admin/timeline';
 import { TYPE_META } from '@/components/admin/question-editor';
 import { Button } from '@/components/ui/button';
@@ -146,9 +147,15 @@ export function EvaluationReview({ attemptId }: { attemptId: string }) {
           <Sum label="Unanswered" value={a.scoring.unansweredCount} />
           <Sum label="Timed out" value={a.scoring.timedOutCount} />
           <Sum label="Duration" value={a.endedAt ? fmtDuration((new Date(a.endedAt).getTime() - new Date(a.startedAt).getTime()) / 1000) : '—'} />
-          <Sum label="Security" value={a.securityViolation ? 'Violation' : a.warningCount ? `${a.warningCount} warn` : 'Clean'} accent={a.securityViolation ? 'text-bad' : a.warningCount ? 'text-warn' : 'text-ok'} />
+          <Sum label="Security" value={a.securityViolation ? 'Violation' : a.interruptions.length ? 'Interrupted' : a.warningCount ? `${a.warningCount} warn` : 'Clean'} accent={a.securityViolation ? 'text-bad' : a.interruptions.length || a.warningCount ? 'text-warn' : 'text-ok'} />
         </div>
       </div>
+
+      {a.interruptions.length > 0 && (
+        <div className="mb-4">
+          <InterruptionList items={a.interruptions} />
+        </div>
+      )}
 
       {a.securityViolation && (
         <div className={cn('mb-4 rounded-[14px] border p-5', a.status === 'DISQUALIFIED' ? 'border-bad/35 bg-[linear-gradient(90deg,rgba(224,93,85,0.12),rgba(224,93,85,0.03))]' : 'border-warn/30 bg-warn/[0.06]')}>

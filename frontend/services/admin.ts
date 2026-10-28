@@ -90,6 +90,7 @@ export const adminApi = {
   evaluation: (id: string) => api<EvaluationDetail>(`/evaluations/${id}`),
   saveEvaluation: (id: string, body: unknown) => api<EvaluationDetail>(`/evaluations/${id}`, { method: 'PATCH', body }),
   terminate: (attemptId: string, reason: string) => api(`/attempts/${attemptId}/terminate`, { method: 'POST', body: { reason } }),
+  allowResume: (attemptId: string, reason: string) => api<{ fromQuestion: number; deadline: string }>(`/attempts/${attemptId}/allow-resume`, { method: 'POST', body: { reason } }),
 
   // curators
   curators: (q: Q) => api<Paged<Curator>>('/curators', { query: q }),

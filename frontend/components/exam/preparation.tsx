@@ -100,10 +100,11 @@ export function Preparation({ candidate, onStarted }: { candidate: CandidateInfo
     { id: 'browser', label: 'Browser supported', detail: !apis ? 'Please use a current Chrome, Edge, Firefox or Safari.' : framed ? 'Open the interview directly, not inside another page.' : !cookies ? 'Cookies must be enabled.' : 'OK', state: apis && !framed && cookies ? 'pass' : 'fail', required: true },
     { id: 'focus', label: 'This window is active', detail: visible && focused ? 'OK' : 'Click anywhere on this page.', state: visible && focused ? 'pass' : 'fail', required: true },
     { id: 'net', label: 'Connection', detail: latency === undefined ? 'Checking…' : latency === null ? 'Cannot reach the server.' : `${latency} ms${latency > 1500 ? ' — slow connection' : ''}`, state: latency === undefined ? 'pending' : latency === null || latency > 3000 ? 'fail' : latency > 1500 ? 'warn' : 'pass', required: true },
-    { id: 'attempt', label: 'Attempt available', detail: ins.data ? 'Not used yet' : ins.isError ? 'Unavailable' : 'Checking…', state: ins.data ? 'pass' : ins.isError ? 'fail' : 'pending', required: true },
+    { id: 'attempt', label: 'Attempt available', detail: ins.data ? (ins.data.resume ? 'Allowed to continue' : 'Not used yet') : ins.isError ? 'Unavailable' : 'Checking…', state: ins.data ? 'pass' : ins.isError ? 'fail' : 'pending', required: true },
     { id: 'fs', label: 'Fullscreen', detail: fs ? 'Will open when you start' : 'Not supported — the interview runs in this window', state: fs ? 'pass' : 'warn', required: false },
   ];
   const window_ = ins.data?.window ?? 'OPEN';
+  const resume = ins.data?.resume ?? null;
   const ready = ack1 && ack2 && checks.every((c) => !c.required || c.state === 'pass' || c.state === 'warn') && window_ === 'OPEN';
 
   const begin = async () => {
@@ -188,9 +189,18 @@ export function Preparation({ candidate, onStarted }: { candidate: CandidateInfo
             </p>
           )}
           <p className="mt-3 text-[14px] text-fg-2">
-            Hi {candidate.fullName}. The interview has not started yet — read this page first.
+            Hi {candidate.fullName}. {resume ? 'Read this page again before you continue.' : 'The interview has not started yet — read this page first.'}
           </p>
         </div>
+
+        {resume && (
+          <section className="rounded-[10px] border border-azure/30 bg-azure/[0.07] px-5 py-4 text-[14px] leading-relaxed text-fg-2">
+            <p className="font-semibold text-fg">You have been allowed to continue your interview</p>
+            <p className="mt-1">
+              You will continue from question {resume.fromQuestion} of {resume.totalQuestions}. Your earlier answers are saved and cannot be changed. The question you were on when the interview stopped is closed — what you had written is kept for review.
+            </p>
+          </section>
+        )}
 
         {ins.isError && <p className="rounded-[8px] border border-bad/30 bg-bad/[0.08] px-4 py-3 text-[13.5px] text-fg-2">{ins.error instanceof ApiError ? ins.error.message : 'Unable to load the interview.'}</p>}
 
@@ -210,7 +220,7 @@ export function Preparation({ candidate, onStarted }: { candidate: CandidateInfo
           <p className="mt-4 text-[13px] leading-relaxed text-fg-3">
             <span className="font-semibold text-[#F29790]">Before you start:</span> close other programs and turn on Do Not Disturb. A pop-up that takes focus away from this window counts as leaving the interview. If the connection drops for more than {ins.data?.policy.heartbeatTimeoutSeconds ?? 25} seconds, the interview ends.
           </p>
-          {(ins.data?.startDeadline || iv?.availableUntil) && <p className="mt-2 text-[13px] text-fg-3">Start before {fmtDateTime(ins.data?.startDeadline ?? iv?.availableUntil)}.</p>}
+          {(ins.data?.startDeadline || iv?.availableUntil) && <p className="mt-2 text-[13px] text-fg-3">{resume ? 'Continue' : 'Start'} before {fmtDateTime(ins.data?.startDeadline ?? iv?.availableUntil)}.</p>}
         </section>
 
         <section className="panel rounded-[10px] px-5 py-4">
@@ -240,7 +250,7 @@ export function Preparation({ candidate, onStarted }: { candidate: CandidateInfo
           </label>
           {window_ !== 'OPEN' && <p className="text-[13px] text-[#F0C47A]">{window_ === 'NOT_YET_OPEN' ? 'This interview is not open yet.' : 'The time to start this interview has passed.'}</p>}
           <Button variant="primary" size="lg" className="w-full" disabled={!ready} onClick={() => setConfirmOpen(true)}>
-            Start interview
+            {resume ? `Continue from question ${resume.fromQuestion}` : 'Start interview'}
           </Button>
           {!ready && <p className="text-center text-[12.5px] text-fg-4">Tick both boxes and make sure the system check passes.</p>}
         </section>
@@ -253,15 +263,15 @@ export function Preparation({ candidate, onStarted }: { candidate: CandidateInfo
         tone="danger"
         icon={<AlertTriangle />}
         size="sm"
-        title="Start the interview now?"
-        description="Your one attempt begins as soon as you press Start. Leaving this window or switching applications will end it."
+        title={resume ? 'Continue the interview now?' : 'Start the interview now?'}
+        description={resume ? `Question ${resume.fromQuestion} starts as soon as you press Continue. Leaving this window or switching applications will end it again.` : 'Your one attempt begins as soon as you press Start. Leaving this window or switching applications will end it.'}
         footer={
           <>
             <Button variant="ghost" disabled={starting} onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
             <Button variant="primary" loading={starting} onClick={begin}>
-              Start
+              {resume ? 'Continue' : 'Start'}
             </Button>
           </>
         }

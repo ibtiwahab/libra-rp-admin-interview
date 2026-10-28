@@ -14,6 +14,27 @@ const violationSchema = new Schema(
   { _id: false },
 );
 
+/**
+ * One time an ended attempt was reopened by staff: what ended it, who allowed the candidate to
+ * continue, and from which question. Kept forever so evaluators see every interruption.
+ */
+const interruptionSchema = new Schema(
+  {
+    status: { type: String, required: true },
+    endReason: { type: String, default: null },
+    endedAt: { type: Date, default: null },
+    violation: { type: violationSchema, default: null },
+    resumeFromIndex: { type: Number, required: true },
+    allowedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    allowedByName: { type: String, required: true },
+    allowedAt: { type: Date, required: true },
+    reason: { type: String, required: true },
+    resumedAt: { type: Date, default: null },
+    withdrawnAt: { type: Date, default: null },
+  },
+  { _id: false },
+);
+
 /** Candidate details exactly as they were when the attempt started. */
 const candidateSnapshotSchema = new Schema(
   {
@@ -84,6 +105,9 @@ const attemptSchema = new Schema(
 
     securityViolation: { type: violationSchema, default: null },
     warningCount: { type: Number, default: 0 },
+    /** True while staff have allowed the candidate to continue but they have not started again yet. */
+    resumePending: { type: Boolean, default: false },
+    interruptions: { type: [interruptionSchema], default: [] },
 
     candidateSnapshot: { type: candidateSnapshotSchema, required: true },
     interviewSnapshot: { type: interviewSnapshotSchema, required: true },

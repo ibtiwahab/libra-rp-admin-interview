@@ -39,10 +39,15 @@ export interface TerminalState {
 
 export type ExamStatus =
   | { state: 'NO_ASSIGNMENT'; candidate: CandidateInfo; serverNow: string }
-  | { state: 'NOT_STARTED'; candidate: CandidateInfo; serverNow: string; window: 'OPEN' | 'NOT_YET_OPEN' | 'CLOSED'; startDeadline: string | null; interview: InterviewSummary | null }
+  | { state: 'NOT_STARTED'; candidate: CandidateInfo; serverNow: string; window: 'OPEN' | 'NOT_YET_OPEN' | 'CLOSED'; startDeadline: string | null; interview: InterviewSummary | null; resume: ResumeInfo | null }
   | { state: 'IN_PROGRESS'; candidate: CandidateInfo; serverNow: string; interview: InterviewSummary | null; attempt: { referenceCode: string; startedAt: string; currentQuestionIndex: number; totalQuestions: number; boundToThisSession: boolean } }
   | { state: 'COMPLETED' | 'DISQUALIFIED' | 'EXPIRED'; candidate: CandidateInfo; serverNow: string; interview: InterviewSummary | null; result: TerminalState }
   | { state: 'CANCELLED'; candidate: CandidateInfo; serverNow: string; interview: InterviewSummary | null };
+
+export interface ResumeInfo {
+  fromQuestion: number;
+  totalQuestions: number;
+}
 
 export interface CandidateInfo {
   fullName: string;
@@ -55,6 +60,8 @@ export interface Instructions {
   interview: InterviewSummary & { description: string; instructions: string; shortestTimerSeconds: number; longestTimerSeconds: number; categories: string[] };
   window: 'OPEN' | 'NOT_YET_OPEN' | 'CLOSED';
   startDeadline: string | null;
+  /** Set when staff allowed the candidate to continue an interrupted interview. */
+  resume: ResumeInfo | null;
   policy: { heartbeatIntervalSeconds: number; heartbeatTimeoutSeconds: number; heartbeatTimeoutAction: 'EXPIRE' | 'DISQUALIFY'; submissionGraceMs: number };
 }
 
