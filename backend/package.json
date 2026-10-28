@@ -16,6 +16,7 @@
     "bootstrap:admin:prod": "node dist/scripts/bootstrap-head-admin.js",
     "seed": "tsx src/scripts/seed.ts",
     "seed:admin-assistant": "tsx src/scripts/seed-admin-assistant.ts",
+    "seed:admin-level2": "tsx src/scripts/seed-admin-level2.ts",
     "set-timers": "tsx src/scripts/set-timers.ts",
     "indexes:sync": "tsx src/scripts/sync-indexes.ts",
     "retention:erase": "tsx src/scripts/legal-erasure.ts"
